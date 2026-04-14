@@ -1,8 +1,3 @@
-const [activeTasks, doneTasks, reviewTasks] = await Promise.all([
-  TaskModel.countDocuments({ ownerId, status: { $ne: 'done' } }),
-  TaskModel.countDocuments({ ownerId, status: 'done' }),
-  TaskModel.countDocuments({ ownerId, status: 'review' }),
-]);
 import express from 'express';
 import { z } from 'zod';
 import { authRequired } from '../middleware/auth.js';
@@ -67,9 +62,25 @@ const mapTaskForClient = (task) => ({
 const MS_IN_DAY = 24 * 60 * 60 * 1000;
 const MS_IN_WEEK = 7 * MS_IN_DAY;
 const WEEKDAY_LABELS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-const MONTH_LABELS = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+const MONTH_LABELS = [
+  'Янв',
+  'Фев',
+  'Мар',
+  'Апр',
+  'Май',
+  'Июн',
+  'Июл',
+  'Авг',
+  'Сен',
+  'Окт',
+  'Ноя',
+  'Дек',
+];
 
-const utcDayStart = (date) => new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+const utcDayStart = (date) =>
+  new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
 const addUtcDays = (date, days) => new Date(date.getTime() + days * MS_IN_DAY);
 const formatDayKey = (date) => date.toISOString().slice(0, 10);
 const formatMonthKey = (date) => date.toISOString().slice(0, 7);
@@ -79,7 +90,13 @@ const aggregateCreatedByDay = (ownerId, start, endExclusive) => {
     { $match: { ownerId, createdAt: { $gte: start, $lt: endExclusive } } },
     {
       $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'UTC' } },
+        _id: {
+          $dateToString: {
+            format: '%Y-%m-%d',
+            date: '$createdAt',
+            timezone: 'UTC',
+          },
+        },
         count: { $sum: 1 },
       },
     },
@@ -106,14 +123,25 @@ const aggregateCompletedByDay = (ownerId, start, endExclusive) => {
     },
     {
       $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$effectiveCompletedAt', timezone: 'UTC' } },
+        _id: {
+          $dateToString: {
+            format: '%Y-%m-%d',
+            date: '$effectiveCompletedAt',
+            timezone: 'UTC',
+          },
+        },
         count: { $sum: 1 },
       },
     },
   ]);
 };
 
-const aggregateCreatedByWeekIndex = (ownerId, start, endExclusive, weeksCount) => {
+const aggregateCreatedByWeekIndex = (
+  ownerId,
+  start,
+  endExclusive,
+  weeksCount,
+) => {
   return TaskModel.aggregate([
     { $match: { ownerId, createdAt: { $gte: start, $lt: endExclusive } } },
     {
@@ -135,7 +163,12 @@ const aggregateCreatedByWeekIndex = (ownerId, start, endExclusive, weeksCount) =
   ]);
 };
 
-const aggregateCompletedByWeekIndex = (ownerId, start, endExclusive, weeksCount) => {
+const aggregateCompletedByWeekIndex = (
+  ownerId,
+  start,
+  endExclusive,
+  weeksCount,
+) => {
   return TaskModel.aggregate([
     {
       $match: {
@@ -157,7 +190,10 @@ const aggregateCompletedByWeekIndex = (ownerId, start, endExclusive, weeksCount)
       $project: {
         weekIndex: {
           $floor: {
-            $divide: [{ $subtract: ['$effectiveCompletedAt', start] }, MS_IN_WEEK],
+            $divide: [
+              { $subtract: ['$effectiveCompletedAt', start] },
+              MS_IN_WEEK,
+            ],
           },
         },
       },
@@ -177,7 +213,13 @@ const aggregateCreatedByMonthKey = (ownerId, start, endExclusive) => {
     { $match: { ownerId, createdAt: { $gte: start, $lt: endExclusive } } },
     {
       $group: {
-        _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: 'UTC' } },
+        _id: {
+          $dateToString: {
+            format: '%Y-%m',
+            date: '$createdAt',
+            timezone: 'UTC',
+          },
+        },
         count: { $sum: 1 },
       },
     },
@@ -204,7 +246,13 @@ const aggregateCompletedByMonthKey = (ownerId, start, endExclusive) => {
     },
     {
       $group: {
-        _id: { $dateToString: { format: '%Y-%m', date: '$effectiveCompletedAt', timezone: 'UTC' } },
+        _id: {
+          $dateToString: {
+            format: '%Y-%m',
+            date: '$effectiveCompletedAt',
+            timezone: 'UTC',
+          },
+        },
         count: { $sum: 1 },
       },
     },
@@ -212,92 +260,128 @@ const aggregateCompletedByMonthKey = (ownerId, start, endExclusive) => {
 };
 
 router.get('/projects/:projectId/tasks', async (req, res) => {
-  const project = await ProjectModel.findOne({ id: req.params.projectId, ownerId: req.user.id }).lean();
+  const project = await ProjectModel.findOne({
+    id: req.params.projectId,
+    ownerId: req.user.id,
+  }).lean();
   if (!project) {
     return res.status(404).json({ error: 'Project not found' });
   }
 
-  const tasks = await TaskModel.find({ projectId: project.id, ownerId: req.user.id }).sort({ createdAt: -1 }).lean();
+  const tasks = await TaskModel.find({
+    projectId: project.id,
+    ownerId: req.user.id,
+  })
+    .sort({ createdAt: -1 })
+    .lean();
   return res.json(tasks.map(mapTaskForClient));
 });
 
-router.post('/projects/:projectId/tasks', validate(createTaskSchema), async (req, res) => {
-  const project = await ProjectModel.findOne({ id: req.params.projectId, ownerId: req.user.id }).lean();
-  if (!project) {
-    return res.status(404).json({ error: 'Project not found' });
-  }
+router.post(
+  '/projects/:projectId/tasks',
+  validate(createTaskSchema),
+  async (req, res) => {
+    const project = await ProjectModel.findOne({
+      id: req.params.projectId,
+      ownerId: req.user.id,
+    }).lean();
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
 
-  const task = await TaskModel.create({
-    id: nextId('tsk'),
-    projectId: project.id,
-    ownerId: req.user.id,
-    title: req.body.title,
-    description: req.body.description ?? '',
-    status: req.body.status,
-    completedAt: req.body.status === 'done' ? new Date() : null,
-    dateLabel: req.body.dueDate ?? 'Срок не указан',
-    category: req.body.category ?? 'General',
-    categoryColor: req.body.categoryColor ?? '#5051F9',
-    subtasks: [],
-  });
+    const task = await TaskModel.create({
+      id: nextId('tsk'),
+      projectId: project.id,
+      ownerId: req.user.id,
+      title: req.body.title,
+      description: req.body.description ?? '',
+      status: req.body.status,
+      completedAt: req.body.status === 'done' ? new Date() : null,
+      dateLabel: req.body.dueDate ?? 'Срок не указан',
+      category: req.body.category ?? 'General',
+      categoryColor: req.body.categoryColor ?? '#5051F9',
+      subtasks: [],
+    });
 
-  return res.status(201).json(mapTaskForClient(task.toObject()));
-});
+    return res.status(201).json(mapTaskForClient(task.toObject()));
+  },
+);
 
-router.post('/tasks/:taskId/subtasks', validate(createSubtaskSchema), async (req, res) => {
-  const task = await TaskModel.findOne({ id: req.params.taskId, ownerId: req.user.id });
+router.post(
+  '/tasks/:taskId/subtasks',
+  validate(createSubtaskSchema),
+  async (req, res) => {
+    const task = await TaskModel.findOne({
+      id: req.params.taskId,
+      ownerId: req.user.id,
+    });
 
-  if (!task) {
-    return res.status(404).json({ error: 'Task not found' });
-  }
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
 
-  if (!Array.isArray(task.subtasks)) {
-    task.subtasks = [];
-  }
+    if (!Array.isArray(task.subtasks)) {
+      task.subtasks = [];
+    }
 
-  task.subtasks.push({
-    id: nextId('sub'),
-    title: req.body.title,
-    isDone: false,
-  });
+    task.subtasks.push({
+      id: nextId('sub'),
+      title: req.body.title,
+      isDone: false,
+    });
 
-  await task.save();
-  return res.status(201).json(mapTaskForClient(task.toObject()));
-});
+    await task.save();
+    return res.status(201).json(mapTaskForClient(task.toObject()));
+  },
+);
 
-router.patch('/tasks/:taskId/subtasks/:subtaskId', validate(updateSubtaskSchema), async (req, res) => {
-  const task = await TaskModel.findOne({ id: req.params.taskId, ownerId: req.user.id });
+router.patch(
+  '/tasks/:taskId/subtasks/:subtaskId',
+  validate(updateSubtaskSchema),
+  async (req, res) => {
+    const task = await TaskModel.findOne({
+      id: req.params.taskId,
+      ownerId: req.user.id,
+    });
 
-  if (!task) {
-    return res.status(404).json({ error: 'Task not found' });
-  }
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
 
-  const subtask = task.subtasks?.find((item) => item.id === req.params.subtaskId);
-  if (!subtask) {
-    return res.status(404).json({ error: 'Subtask not found' });
-  }
+    const subtask = task.subtasks?.find(
+      (item) => item.id === req.params.subtaskId,
+    );
+    if (!subtask) {
+      return res.status(404).json({ error: 'Subtask not found' });
+    }
 
-  if (req.body.isDone !== undefined) {
-    subtask.isDone = req.body.isDone;
-  }
+    if (req.body.isDone !== undefined) {
+      subtask.isDone = req.body.isDone;
+    }
 
-  if (req.body.title !== undefined) {
-    subtask.title = req.body.title;
-  }
+    if (req.body.title !== undefined) {
+      subtask.title = req.body.title;
+    }
 
-  await task.save();
-  return res.json(mapTaskForClient(task.toObject()));
-});
+    await task.save();
+    return res.json(mapTaskForClient(task.toObject()));
+  },
+);
 
 router.delete('/tasks/:taskId/subtasks/:subtaskId', async (req, res) => {
-  const task = await TaskModel.findOne({ id: req.params.taskId, ownerId: req.user.id });
+  const task = await TaskModel.findOne({
+    id: req.params.taskId,
+    ownerId: req.user.id,
+  });
 
   if (!task) {
     return res.status(404).json({ error: 'Task not found' });
   }
 
   const initialLength = Array.isArray(task.subtasks) ? task.subtasks.length : 0;
-  task.subtasks = (task.subtasks ?? []).filter((item) => item.id !== req.params.subtaskId);
+  task.subtasks = (task.subtasks ?? []).filter(
+    (item) => item.id !== req.params.subtaskId,
+  );
 
   if (task.subtasks.length === initialLength) {
     return res.status(404).json({ error: 'Subtask not found' });
@@ -308,14 +392,18 @@ router.delete('/tasks/:taskId/subtasks/:subtaskId', async (req, res) => {
 });
 
 router.patch('/tasks/:taskId', validate(updateTaskSchema), async (req, res) => {
-  const task = await TaskModel.findOne({ id: req.params.taskId, ownerId: req.user.id });
+  const task = await TaskModel.findOne({
+    id: req.params.taskId,
+    ownerId: req.user.id,
+  });
 
   if (!task) {
     return res.status(404).json({ error: 'Task not found' });
   }
 
   if (req.body.title !== undefined) task.title = req.body.title;
-  if (req.body.description !== undefined) task.description = req.body.description;
+  if (req.body.description !== undefined)
+    task.description = req.body.description;
   if (req.body.status !== undefined) {
     const previousStatus = task.status;
     task.status = req.body.status;
@@ -328,16 +416,21 @@ router.patch('/tasks/:taskId', validate(updateTaskSchema), async (req, res) => {
       task.completedAt = null;
     }
   }
-  if (req.body.dueDate !== undefined) task.dateLabel = req.body.dueDate || 'Срок не указан';
+  if (req.body.dueDate !== undefined)
+    task.dateLabel = req.body.dueDate || 'Срок не указан';
   if (req.body.category !== undefined) task.category = req.body.category;
-  if (req.body.categoryColor !== undefined) task.categoryColor = req.body.categoryColor;
+  if (req.body.categoryColor !== undefined)
+    task.categoryColor = req.body.categoryColor;
   await task.save();
 
   return res.json(mapTaskForClient(task.toObject()));
 });
 
 router.delete('/tasks/:taskId', async (req, res) => {
-  const removed = await TaskModel.findOneAndDelete({ id: req.params.taskId, ownerId: req.user.id });
+  const removed = await TaskModel.findOneAndDelete({
+    id: req.params.taskId,
+    ownerId: req.user.id,
+  });
 
   if (!removed) {
     return res.status(404).json({ error: 'Task not found' });
@@ -351,52 +444,65 @@ router.get('/tasks/summary', async (req, res) => {
   const todayStart = utcDayStart(new Date());
   const start = addUtcDays(todayStart, -6);
   const end = addUtcDays(todayStart, 1);
-  const days = Array.from({ length: 7 }, (_, index) => addUtcDays(start, index));
+  const days = Array.from({ length: 7 }, (_, index) =>
+    addUtcDays(start, index),
+  );
 
-  const [statusCounts, newRows, completedRows, doneProjectsRows] = await Promise.all([
-    TaskModel.aggregate([
-      { $match: { ownerId } },
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 },
-        },
-      },
-    ]),
-    aggregateCreatedByDay(ownerId, start, end),
-    aggregateCompletedByDay(ownerId, start, end),
-    TaskModel.aggregate([
-      { $match: { ownerId } },
-      {
-        $group: {
-          _id: '$projectId',
-          tasksCount: { $sum: 1 },
-          doneCount: { $sum: { $cond: [{ $eq: ['$status', 'done'] }, 1, 0] } },
-          doneAt: { $max: { $ifNull: ['$completedAt', '$updatedAt'] } },
-        },
-      },
-      {
-        $match: {
-          $expr: {
-            $and: [{ $gt: ['$tasksCount', 0] }, { $eq: ['$tasksCount', '$doneCount'] }],
+  const [statusCounts, newRows, completedRows, doneProjectsRows] =
+    await Promise.all([
+      TaskModel.aggregate([
+        { $match: { ownerId } },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
           },
         },
-      },
-      {
-        $project: {
-          _id: 1,
-          doneAt: 1,
+      ]),
+      aggregateCreatedByDay(ownerId, start, end),
+      aggregateCompletedByDay(ownerId, start, end),
+      TaskModel.aggregate([
+        { $match: { ownerId } },
+        {
+          $group: {
+            _id: '$projectId',
+            tasksCount: { $sum: 1 },
+            doneCount: {
+              $sum: { $cond: [{ $eq: ['$status', 'done'] }, 1, 0] },
+            },
+            doneAt: { $max: { $ifNull: ['$completedAt', '$updatedAt'] } },
+          },
         },
-      },
-    ]),
-  ]);
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $gt: ['$tasksCount', 0] },
+                { $eq: ['$tasksCount', '$doneCount'] },
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            doneAt: 1,
+          },
+        },
+      ]),
+    ]);
 
   const statusMap = new Map(statusCounts.map((row) => [row._id, row.count]));
   const done = statusMap.get('done') ?? 0;
-  const newTotalForPeriod = newRows.reduce((sum, row) => sum + (row.count ?? 0), 0);
+  const newTotalForPeriod = newRows.reduce(
+    (sum, row) => sum + (row.count ?? 0),
+    0,
+  );
 
   const newByDayKey = new Map(newRows.map((row) => [row._id, row.count]));
-  const completedByDayKey = new Map(completedRows.map((row) => [row._id, row.count]));
+  const completedByDayKey = new Map(
+    completedRows.map((row) => [row._id, row.count]),
+  );
 
   const doneProjectTimestamps = doneProjectsRows
     .map((row) => new Date(row.doneAt).getTime())
@@ -404,7 +510,8 @@ router.get('/tasks/summary', async (req, res) => {
 
   const projectsTrend = days.map((day) => {
     const dayEnd = addUtcDays(day, 1).getTime();
-    return doneProjectTimestamps.filter((timestamp) => timestamp < dayEnd).length;
+    return doneProjectTimestamps.filter((timestamp) => timestamp < dayEnd)
+      .length;
   });
 
   return res.json([
@@ -412,7 +519,9 @@ router.get('/tasks/summary', async (req, res) => {
       id: 'completed',
       title: 'Готово',
       amount: done,
-      trendData: days.map((day) => completedByDayKey.get(formatDayKey(day)) ?? 0),
+      trendData: days.map(
+        (day) => completedByDayKey.get(formatDayKey(day)) ?? 0,
+      ),
       lineColor: '#5051F9',
     },
     {
@@ -446,20 +555,30 @@ router.get('/tasks/dynamics', async (req, res) => {
     ]);
 
     const newByDayKey = new Map(newRows.map((row) => [row._id, row.count]));
-    const completedByDayKey = new Map(completedRows.map((row) => [row._id, row.count]));
-    const days = Array.from({ length: 7 }, (_, index) => addUtcDays(start, index));
+    const completedByDayKey = new Map(
+      completedRows.map((row) => [row._id, row.count]),
+    );
+    const days = Array.from({ length: 7 }, (_, index) =>
+      addUtcDays(start, index),
+    );
 
     return res.json({
       labels: days.map((day) => WEEKDAY_LABELS[day.getUTCDay()]),
-      completed: days.map((day) => completedByDayKey.get(formatDayKey(day)) ?? 0),
+      completed: days.map(
+        (day) => completedByDayKey.get(formatDayKey(day)) ?? 0,
+      ),
       newTasks: days.map((day) => newByDayKey.get(formatDayKey(day)) ?? 0),
     });
   }
 
   if (period === 'year') {
     const now = new Date();
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
-    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const start = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1),
+    );
+    const end = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+    );
 
     const [newRows, completedRows] = await Promise.all([
       aggregateCreatedByMonthKey(ownerId, start, end),
@@ -467,16 +586,25 @@ router.get('/tasks/dynamics', async (req, res) => {
     ]);
 
     const newByMonthKey = new Map(newRows.map((row) => [row._id, row.count]));
-    const completedByMonthKey = new Map(completedRows.map((row) => [row._id, row.count]));
+    const completedByMonthKey = new Map(
+      completedRows.map((row) => [row._id, row.count]),
+    );
     const months = Array.from(
       { length: 12 },
-      (_, index) => new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + index, 1))
+      (_, index) =>
+        new Date(
+          Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + index, 1),
+        ),
     );
 
     return res.json({
       labels: months.map((monthDate) => MONTH_LABELS[monthDate.getUTCMonth()]),
-      completed: months.map((monthDate) => completedByMonthKey.get(formatMonthKey(monthDate)) ?? 0),
-      newTasks: months.map((monthDate) => newByMonthKey.get(formatMonthKey(monthDate)) ?? 0),
+      completed: months.map(
+        (monthDate) => completedByMonthKey.get(formatMonthKey(monthDate)) ?? 0,
+      ),
+      newTasks: months.map(
+        (monthDate) => newByMonthKey.get(formatMonthKey(monthDate)) ?? 0,
+      ),
     });
   }
 
@@ -488,12 +616,23 @@ router.get('/tasks/dynamics', async (req, res) => {
   ]);
 
   const newByWeekIndex = new Map(newRows.map((row) => [row._id, row.count]));
-  const completedByWeekIndex = new Map(completedRows.map((row) => [row._id, row.count]));
+  const completedByWeekIndex = new Map(
+    completedRows.map((row) => [row._id, row.count]),
+  );
 
   return res.json({
-    labels: Array.from({ length: weeksCount }, (_, index) => `Нед ${index + 1}`),
-    completed: Array.from({ length: weeksCount }, (_, index) => completedByWeekIndex.get(index) ?? 0),
-    newTasks: Array.from({ length: weeksCount }, (_, index) => newByWeekIndex.get(index) ?? 0),
+    labels: Array.from(
+      { length: weeksCount },
+      (_, index) => `Нед ${index + 1}`,
+    ),
+    completed: Array.from(
+      { length: weeksCount },
+      (_, index) => completedByWeekIndex.get(index) ?? 0,
+    ),
+    newTasks: Array.from(
+      { length: weeksCount },
+      (_, index) => newByWeekIndex.get(index) ?? 0,
+    ),
   });
 });
 
